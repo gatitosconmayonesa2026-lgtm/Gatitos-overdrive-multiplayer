@@ -1,0 +1,1157 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Gatitos Cyber Overdrive: Online & Local Multiplayer</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- PeerJS WebRTC Library for Serverless P2P Online Multiplayer -->
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@500;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: manipulation;
+        }
+        body {
+            font-family: 'Rajdhani', sans-serif;
+            background-color: #030308;
+            color: #ffffff;
+            overflow: hidden;
+            margin: 0;
+        }
+        .font-orbitron { font-family: 'Orbitron', sans-serif; }
+        .neon-glow-cyan { text-shadow: 0 0 10px rgba(0, 243, 255, 0.8), 0 0 20px rgba(0, 243, 255, 0.5); }
+        .neon-glow-gold { text-shadow: 0 0 10px rgba(255, 215, 0, 0.8), 0 0 20px rgba(255, 215, 0, 0.5); }
+        .neon-glow-pink { text-shadow: 0 0 10px rgba(255, 0, 128, 0.8), 0 0 20px rgba(255, 0, 128, 0.5); }
+        
+        .neon-btn {
+            background: linear-gradient(135deg, rgba(0, 243, 255, 0.2), rgba(255, 0, 128, 0.2));
+            border: 2px solid #00f3ff;
+            box-shadow: 0 0 12px rgba(0, 243, 255, 0.4);
+            transition: all 0.15s ease-in-out;
+        }
+        .neon-btn:hover, .neon-btn:active {
+            background: linear-gradient(135deg, rgba(0, 243, 255, 0.5), rgba(255, 0, 128, 0.5));
+            box-shadow: 0 0 25px rgba(0, 243, 255, 0.8);
+            transform: scale(1.02);
+        }
+        .neon-btn-gold {
+            background: linear-gradient(135deg, rgba(255, 215, 0, 0.2), rgba(255, 140, 0, 0.2));
+            border: 2px solid #ffd700;
+            box-shadow: 0 0 12px rgba(255, 215, 0, 0.4);
+        }
+        .neon-btn-gold:hover, .neon-btn-gold:active {
+            background: linear-gradient(135deg, rgba(255, 215, 0, 0.5), rgba(255, 140, 0, 0.5));
+            box-shadow: 0 0 25px rgba(255, 215, 0, 0.8);
+            transform: scale(1.02);
+        }
+        canvas {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+            background: radial-gradient(circle at center, #0a0a20 0%, #020206 100%);
+        }
+        .touch-btn {
+            background: rgba(255, 255, 255, 0.08);
+            border: 2px solid rgba(0, 243, 255, 0.5);
+            backdrop-filter: blur(6px);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #00f3ff;
+            font-size: 1.1rem;
+            font-weight: bold;
+            touch-action: none;
+        }
+        .touch-btn:active {
+            background: rgba(0, 243, 255, 0.4);
+            box-shadow: 0 0 15px #00f3ff;
+        }
+        .touch-btn-p2 {
+            border-color: rgba(255, 0, 128, 0.5);
+            color: #ff0080;
+        }
+        .touch-btn-p2:active {
+            background: rgba(255, 0, 128, 0.4);
+            box-shadow: 0 0 15px #ff0080;
+        }
+    </style>
+</head>
+<body class="w-screen h-screen relative bg-black overflow-hidden flex items-center justify-center">
+
+    <!-- Canvas Principal -->
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- HUD Overlay durante el juego -->
+    <div id="hud" class="hidden absolute top-0 left-0 w-full p-3 pointer-events-none flex justify-between items-start z-10">
+        <!-- P1 Stats -->
+        <div class="flex flex-col gap-1 bg-black/70 p-3 rounded-xl border border-cyan-500/40 backdrop-blur-md">
+            <div class="text-xs uppercase font-orbitron text-cyan-400 font-bold flex items-center gap-1.5">
+                <span class="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-ping"></span>
+                <span id="hudP1Name">P1: Gato B/N + Homero</span>
+            </div>
+            <div id="hudP1Score" class="text-2xl font-orbitron font-bold text-white neon-glow-cyan">0 PTS</div>
+            <div id="hudP1Lives" class="text-xs font-orbitron text-cyan-300">❤️❤️❤️ Vidas</div>
+        </div>
+
+        <!-- Center HUD Status -->
+        <div class="flex flex-col items-center bg-black/70 p-2.5 rounded-xl border border-purple-500/40 backdrop-blur-md">
+            <div id="hudModeBadge" class="text-xs font-orbitron text-purple-400 font-bold uppercase tracking-wider">SOLO</div>
+            <div id="hudLevel" class="text-xl font-orbitron font-bold text-pink-400">Nivel 1</div>
+            <div id="hudCoinsEarned" class="text-xs font-orbitron text-yellow-400 font-semibold">🪙 +0 Monedas</div>
+            <div class="text-[10px] font-orbitron text-gray-400 mt-0.5">(5,000 pts = 500 🪙)</div>
+        </div>
+
+        <!-- P2 Stats -->
+        <div id="hudP2Container" class="hidden flex flex-col items-end gap-1 bg-black/70 p-3 rounded-xl border border-pink-500/40 backdrop-blur-md">
+            <div class="text-xs uppercase font-orbitron text-pink-400 font-bold flex items-center gap-1.5">
+                <span id="hudP2Name">P2: Gato Acurrucado</span>
+                <span class="w-2.5 h-2.5 rounded-full bg-pink-400 animate-ping"></span>
+            </div>
+            <div id="hudP2Score" class="text-2xl font-orbitron font-bold text-white neon-glow-pink">0 PTS</div>
+            <div id="hudP2Lives" class="text-xs font-orbitron text-pink-300">❤️❤️❤️ Vidas</div>
+        </div>
+    </div>
+
+    <!-- Menú Principal -->
+    <div id="mainMenu" class="absolute inset-0 flex flex-col items-center justify-center bg-black/90 backdrop-blur-lg z-20 p-4">
+        <div class="max-w-xl w-full text-center flex flex-col items-center gap-4">
+            
+            <!-- Título -->
+            <div>
+                <h1 class="text-4xl sm:text-6xl font-black font-orbitron text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-pink-500 to-yellow-400 neon-glow-cyan">
+                    GATITOS OVERDRIVE
+                </h1>
+                <p class="text-sm sm:text-lg font-bold font-orbitron text-yellow-400 tracking-widest mt-1">
+                    CYBER SPACE: ONLINE & LOCAL MULTIPLAYER
+                </p>
+            </div>
+
+            <!-- Monedas y Récord -->
+            <div class="w-full flex justify-between items-center bg-gray-900/90 border border-yellow-500/50 rounded-2xl p-4 shadow-2xl">
+                <div class="flex items-center gap-3">
+                    <span class="text-3xl">🪙</span>
+                    <div class="text-left">
+                        <div class="text-xs font-orbitron text-gray-400 uppercase">Tus Monedas</div>
+                        <div id="menuCoins" class="text-2xl font-orbitron font-bold text-yellow-400 neon-glow-gold">0</div>
+                    </div>
+                </div>
+                <div class="text-right">
+                    <div class="text-xs font-orbitron text-gray-400 uppercase">Récord Puntos</div>
+                    <div id="menuHighScore" class="text-2xl font-orbitron font-bold text-cyan-400">0</div>
+                </div>
+            </div>
+
+            <!-- Botones -->
+            <div class="w-full grid grid-cols-2 gap-3">
+                <button id="startSoloBtn" class="neon-btn py-3.5 px-4 rounded-xl font-orbitron font-bold text-base text-white uppercase tracking-wider">
+                    🎮 1 Jugador
+                </button>
+                <button id="startLocalBtn" class="neon-btn py-3.5 px-4 rounded-xl font-orbitron font-bold text-base text-cyan-300 uppercase tracking-wider">
+                    👥 Local (2P)
+                </button>
+                <button id="openOnlineBtn" class="neon-btn border-purple-500 py-3.5 px-4 rounded-xl font-orbitron font-bold text-base text-purple-300 uppercase tracking-wider col-span-1">
+                    🌐 Online (PeerJS)
+                </button>
+                <button id="openShopBtn" class="neon-btn-gold py-3.5 px-4 rounded-xl font-orbitron font-bold text-base text-yellow-300 uppercase tracking-wider col-span-1 flex items-center justify-center gap-1.5">
+                    🛍️ Tienda
+                </button>
+            </div>
+
+            <!-- Guía de Controles Rápida -->
+            <div class="text-xs text-gray-400 bg-gray-950/80 rounded-xl p-3 border border-gray-800 w-full text-center font-orbitron space-y-1">
+                <div><strong class="text-cyan-400">P1 (Gato B/N + Homero):</strong> Teclas Flechas / WASD + Espacio/Z | Controles Izquierdos o Arrastre Táctil</div>
+                <div><strong class="text-pink-400">P2 (Gato Acurrucado):</strong> Teclas IJKL + M/Enter | Controles Derecha o Arrastre Táctil</div>
+                <div class="text-yellow-400 text-[11px] font-bold mt-1">🪙 Tasa de Cambio: 5,000 Puntos = 500 Monedas</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Multijugador Online (PeerJS) -->
+    <div id="onlineModal" class="hidden absolute inset-0 flex flex-col items-center justify-center bg-black/95 backdrop-blur-md z-30 p-4">
+        <div class="max-w-md w-full bg-gray-900 border-2 border-purple-500 rounded-2xl p-6 flex flex-col gap-4 text-center shadow-2xl relative">
+            <button id="closeOnlineBtn" class="absolute top-4 right-4 text-gray-400 hover:text-white font-bold text-xl">✕</button>
+
+            <h2 class="text-2xl font-orbitron font-bold text-purple-400 neon-glow-pink">MULTIJUGADOR ONLINE (P2P)</h2>
+            <p class="text-xs text-gray-300">Conéctate directamente con otro dispositivo usando un código de sala en tiempo real.</p>
+
+            <div class="flex flex-col gap-3 border-t border-b border-gray-800 py-4">
+                <!-- Crear Sala -->
+                <div class="flex flex-col gap-2">
+                    <button id="hostCreateBtn" class="neon-btn py-3 px-4 rounded-xl font-orbitron font-bold text-cyan-300">
+                        ➕ Crear Sala (Soy Host P1)
+                    </button>
+                    <div id="hostCodeBox" class="hidden bg-black/80 border border-cyan-400 p-3 rounded-xl font-orbitron">
+                        <span class="text-xs text-gray-400 block mb-1">CÓDIGO DE SALA:</span>
+                        <span id="myRoomCode" class="text-3xl font-black text-yellow-400 tracking-widest">CAT123</span>
+                        <p id="hostStatus" class="text-xs text-cyan-300 mt-2 animate-pulse">Esperando a que P2 ingrese el código...</p>
+                    </div>
+                </div>
+
+                <div class="flex items-center my-1">
+                    <div class="flex-1 border-t border-gray-800"></div>
+                    <span class="px-2 text-xs text-gray-500 font-orbitron">O UNIRSE A SALA</span>
+                    <div class="flex-1 border-t border-gray-800"></div>
+                </div>
+
+                <!-- Unirse a Sala -->
+                <div class="flex gap-2">
+                    <input id="joinCodeInput" type="text" placeholder="EJ: CAT123" maxlength="8" class="w-full bg-black border border-purple-500/60 rounded-xl px-4 py-2.5 text-center font-orbitron text-lg uppercase text-yellow-400 focus:outline-none focus:border-yellow-400">
+                    <button id="joinRoomBtn" class="bg-purple-600 hover:bg-purple-500 text-white font-orbitron font-bold px-5 py-2.5 rounded-xl text-sm transition-all">
+                        Unirse
+                    </button>
+                </div>
+                <div id="clientStatus" class="text-xs text-pink-400 font-orbitron min-h-[16px]"></div>
+            </div>
+
+            <div class="text-[11px] text-gray-400 font-orbitron">
+                * El Host controla al <strong class="text-cyan-400">Gato B/N + Homero</strong> y el cliente al <strong class="text-pink-400">Gato Acurrucado</strong>.
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Tienda de Power-ups -->
+    <div id="shopModal" class="hidden absolute inset-0 flex flex-col items-center justify-center bg-black/95 backdrop-blur-md z-30 p-4">
+        <div class="max-w-lg w-full bg-gray-900 border-2 border-yellow-500 rounded-2xl p-5 flex flex-col gap-4 shadow-2xl relative max-h-[90vh] overflow-y-auto">
+            <button id="closeShopBtn" class="absolute top-4 right-4 text-gray-400 hover:text-white font-bold text-xl">✕</button>
+
+            <div class="flex justify-between items-center border-b border-gray-800 pb-3">
+                <div>
+                    <h2 class="text-2xl font-orbitron font-bold text-yellow-400 neon-glow-gold">TIENDA CYBER NEÓN</h2>
+                    <p class="text-xs text-gray-400">Equipa mejoras permanentes (5,000 pts = 500🪙)</p>
+                </div>
+                <div class="flex items-center gap-1.5 bg-black/80 px-3.5 py-1.5 rounded-xl border border-yellow-500/50">
+                    <span class="text-lg">🪙</span>
+                    <span id="shopCoins" class="text-xl font-orbitron font-bold text-yellow-400">0</span>
+                </div>
+            </div>
+
+            <div id="shopList" class="flex flex-col gap-3">
+                <!-- Inyectado vía JS -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Pantalla Game Over -->
+    <div id="gameOverScreen" class="hidden absolute inset-0 flex flex-col items-center justify-center bg-black/95 backdrop-blur-md z-30 p-4">
+        <div class="max-w-md w-full text-center flex flex-col items-center gap-5">
+            <h2 class="text-4xl sm:text-5xl font-black font-orbitron text-pink-500 neon-glow-pink">
+                ¡MISIÓN FINALIZADA!
+            </h2>
+
+            <div class="bg-gray-900/90 border border-pink-500/40 rounded-2xl p-5 w-full space-y-3">
+                <div class="flex justify-between items-center border-b border-gray-800 pb-2">
+                    <span class="text-gray-400 font-orbitron text-sm">Puntuación Total:</span>
+                    <span id="finalScore" class="text-2xl font-orbitron font-bold text-cyan-400">0</span>
+                </div>
+                <div class="flex justify-between items-center border-b border-gray-800 pb-2">
+                    <span class="text-gray-400 font-orbitron text-sm">Monedas Ganadas (5,000pts = 500🪙):</span>
+                    <span id="finalCoinsEarned" class="text-2xl font-orbitron font-bold text-yellow-400">+0🪙</span>
+                </div>
+                <div class="flex justify-between items-center">
+                    <span class="text-gray-400 font-orbitron text-sm">Nivel Alcanzado:</span>
+                    <span id="finalLevel" class="text-xl font-orbitron font-bold text-pink-400">Nivel 1</span>
+                </div>
+            </div>
+
+            <div class="w-full flex flex-col gap-3">
+                <button id="restartBtn" class="neon-btn py-3.5 px-6 rounded-xl font-orbitron font-bold text-lg text-white uppercase tracking-wider w-full">
+                    🔄 Jugar De Nuevo
+                </button>
+                <button id="returnMenuBtn" class="bg-gray-800 hover:bg-gray-700 text-gray-300 py-3 px-6 rounded-xl font-orbitron text-sm transition-all w-full">
+                    🏠 Volver al Menú
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- CONTROLES TÁCTILES EN PANTALLA -->
+    <!-- Controles Jugador 1 (Izquierda) -->
+    <div id="touchControlsP1" class="hidden absolute bottom-4 left-4 z-20 flex gap-3 items-end pointer-events-none">
+        <div class="grid grid-cols-3 gap-1 pointer-events-auto w-32 h-32">
+            <div></div>
+            <button id="btnUpP1" class="touch-btn">▲</button>
+            <div></div>
+            <button id="btnLeftP1" class="touch-btn">◄</button>
+            <div></div>
+            <button id="btnRightP1" class="touch-btn">►</button>
+            <div></div>
+            <button id="btnDownP1" class="touch-btn">▼</button>
+            <div></div>
+        </div>
+        <button id="btnFireP1" class="touch-btn pointer-events-auto w-16 h-16 bg-cyan-500/20 border-cyan-400 text-cyan-300 font-orbitron font-bold text-xs">
+            FUEGO
+        </button>
+    </div>
+
+    <!-- Controles Jugador 2 (Derecha - Solo activo en Modo Local 2P) -->
+    <div id="touchControlsP2" class="hidden absolute bottom-4 right-4 z-20 flex gap-3 items-end pointer-events-none">
+        <button id="btnFireP2" class="touch-btn touch-btn-p2 pointer-events-auto w-16 h-16 bg-pink-500/20 border-pink-400 text-pink-300 font-orbitron font-bold text-xs">
+            FUEGO
+        </button>
+        <div class="grid grid-cols-3 gap-1 pointer-events-auto w-32 h-32">
+            <div></div>
+            <button id="btnUpP2" class="touch-btn touch-btn-p2">▲</button>
+            <div></div>
+            <button id="btnLeftP2" class="touch-btn touch-btn-p2">◄</button>
+            <div></div>
+            <button id="btnRightP2" class="touch-btn touch-btn-p2">►</button>
+            <div></div>
+            <button id="btnDownP2" class="touch-btn touch-btn-p2">▼</button>
+            <div></div>
+        </div>
+    </div>
+
+    <script>
+        // --- SINTETIZADOR DE AUDIO (Web Audio API) ---
+        class SoundEngine {
+            constructor() { this.ctx = null; }
+            init() {
+                if (!this.ctx) {
+                    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                    this.ctx = new AudioCtx();
+                }
+            }
+            playShoot() {
+                if (!this.ctx) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(800, this.ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(100, this.ctx.currentTime + 0.1);
+                gain.gain.setValueAtTime(0.12, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.1);
+                osc.connect(gain); gain.connect(this.ctx.destination);
+                osc.start(); osc.stop(this.ctx.currentTime + 0.1);
+            }
+            playExplosion() {
+                if (!this.ctx) return;
+                const dur = 0.3;
+                const bufferSize = this.ctx.sampleRate * dur;
+                const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+                const data = buffer.getChannelData(0);
+                for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+                const noise = this.ctx.createBufferSource();
+                noise.buffer = buffer;
+                const filter = this.ctx.createBiquadFilter();
+                filter.type = 'lowpass';
+                filter.frequency.setValueAtTime(600, this.ctx.currentTime);
+                filter.frequency.linearRampToValueAtTime(30, this.ctx.currentTime + dur);
+                const gain = this.ctx.createGain();
+                gain.gain.setValueAtTime(0.25, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + dur);
+                noise.connect(filter); filter.connect(gain); gain.connect(this.ctx.destination);
+                noise.start(); noise.stop(this.ctx.currentTime + dur);
+            }
+            playBuy() {
+                if (!this.ctx) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(440, this.ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(880, this.ctx.currentTime + 0.18);
+                gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.18);
+                osc.connect(gain); gain.connect(this.ctx.destination);
+                osc.start(); osc.stop(this.ctx.currentTime + 0.18);
+            }
+        }
+        const sound = new SoundEngine();
+
+        // --- AVATARES CANVAS PERSONALIZADOS ---
+        function createCatSprite(role) {
+            const c = document.createElement('canvas');
+            c.width = 120; c.height = 120;
+            const cx = c.getContext('2d');
+
+            cx.beginPath();
+            cx.arc(60, 60, 58, 0, Math.PI * 2);
+            cx.clip();
+
+            if (role === 'p1') {
+                // JUGADOR 1: Gatito Blanco y Negro con Homero Simpson
+                cx.fillStyle = '#2d2b2a'; cx.fillRect(0, 0, 120, 120);
+
+                // Homero Simpson (Amarillo, Polo blanco, Pantalón azul)
+                cx.fillStyle = '#fce029'; cx.beginPath(); cx.arc(35, 40, 15, 0, Math.PI * 2); cx.fill();
+                cx.fillStyle = '#ffffff'; cx.beginPath(); cx.arc(30, 36, 5, 0, Math.PI * 2); cx.arc(38, 36, 5, 0, Math.PI * 2); cx.fill();
+                cx.fillStyle = '#000000'; cx.beginPath(); cx.arc(31, 36, 1.5, 0, Math.PI * 2); cx.arc(37, 36, 1.5, 0, Math.PI * 2); cx.fill();
+                cx.fillStyle = '#d1b271'; cx.beginPath(); cx.ellipse(34, 45, 8, 5, 0, 0, Math.PI * 2); cx.fill();
+                cx.fillStyle = '#ffffff'; cx.beginPath(); cx.ellipse(32, 65, 14, 12, 0, 0, Math.PI * 2); cx.fill();
+                cx.fillStyle = '#3b82f6'; cx.beginPath(); cx.ellipse(32, 88, 12, 12, 0, 0, Math.PI * 2); cx.fill();
+
+                // Gato Blanco y Negro
+                cx.fillStyle = '#111111'; cx.beginPath(); cx.ellipse(80, 75, 30, 25, 0, 0, Math.PI * 2); cx.fill();
+                cx.beginPath(); cx.arc(70, 48, 20, 0, Math.PI * 2); cx.fill();
+                cx.beginPath();
+                cx.moveTo(56, 36); cx.lineTo(52, 20); cx.lineTo(66, 32);
+                cx.moveTo(74, 32); cx.lineTo(84, 20); cx.lineTo(82, 36); cx.fill();
+                cx.fillStyle = '#ffffff'; cx.beginPath(); cx.ellipse(75, 70, 16, 20, 0, 0, Math.PI * 2); cx.fill();
+                cx.beginPath(); cx.ellipse(66, 55, 8, 8, 0, 0, Math.PI * 2); cx.fill();
+                cx.fillStyle = '#a8ff00'; cx.beginPath(); cx.arc(63, 44, 4, 0, Math.PI * 2); cx.arc(75, 44, 4, 0, Math.PI * 2); cx.fill();
+            } else if (role === 'p2') {
+                // JUGADOR 2: Gatito Atigrado Acurrucado
+                cx.fillStyle = '#d9cbbe'; cx.fillRect(0, 0, 120, 120);
+
+                cx.fillStyle = '#827163'; cx.beginPath(); cx.ellipse(60, 60, 42, 38, -0.2, 0, Math.PI * 2); cx.fill();
+                cx.fillStyle = '#ffffff'; cx.beginPath(); cx.ellipse(45, 82, 18, 10, -0.4, 0, Math.PI * 2); cx.fill();
+                cx.beginPath(); cx.ellipse(68, 82, 18, 10, 0.4, 0, Math.PI * 2); cx.fill();
+                cx.fillStyle = '#6e5d50'; cx.beginPath(); cx.arc(58, 42, 25, 0, Math.PI * 2); cx.fill();
+                cx.fillStyle = '#ffffff'; cx.beginPath(); cx.ellipse(58, 52, 12, 10, 0, 0, Math.PI * 2); cx.fill();
+                cx.strokeStyle = '#382c24'; cx.lineWidth = 3;
+                cx.beginPath();
+                cx.moveTo(58, 22); cx.lineTo(58, 34);
+                cx.moveTo(50, 25); cx.lineTo(48, 36);
+                cx.moveTo(66, 25); cx.lineTo(68, 36); cx.stroke();
+            } else if (role === 'enemy') {
+                // ENEMIGO: Gatito Atigrado Oscuro Recostado
+                cx.fillStyle = '#211c26'; cx.fillRect(0, 0, 120, 120);
+
+                cx.fillStyle = '#3d342d'; cx.beginPath(); cx.ellipse(60, 65, 40, 28, 0, 0, Math.PI * 2); cx.fill();
+                cx.beginPath(); cx.arc(60, 45, 22, 0, Math.PI * 2); cx.fill();
+                cx.strokeStyle = '#1a1410'; cx.lineWidth = 3;
+                cx.beginPath();
+                cx.moveTo(50, 28); cx.lineTo(50, 42);
+                cx.moveTo(60, 26); cx.lineTo(60, 42);
+                cx.moveTo(70, 28); cx.lineTo(70, 42); cx.stroke();
+                cx.strokeStyle = '#ff0055'; cx.lineWidth = 3;
+                cx.beginPath(); cx.arc(52, 45, 3, 0, Math.PI * 2); cx.arc(68, 45, 3, 0, Math.PI * 2); cx.stroke();
+            }
+            return c;
+        }
+
+        const sprites = {
+            p1: createCatSprite('p1'),
+            p2: createCatSprite('p2'),
+            enemy: createCatSprite('enemy')
+        };
+
+        // --- SISTEMA DE TIENDA Y PERSISTENCIA (LOCALSTORAGE) ---
+        const shopCatalog = [
+            { id: 'shield', name: 'Escudo Cyber Inicial', cost: 300, desc: 'Empieza la partida protegido contra impactos.', icon: '🛡️' },
+            { id: 'triple', name: 'Disparo Triple Inicial', cost: 500, desc: '3 ráfagas neón continuas por disparo.', icon: '⚡' },
+            { id: 'emp', name: 'Bomba EMP Inicial', cost: 700, desc: 'Destruye a los enemigos presentes al despegue.', icon: '💣' },
+            { id: 'doubleCoins', name: 'Multiplicador Monedas 2x', cost: 1000, desc: 'Duplica las monedas obtenidas por puntos.', icon: '🪙' },
+            { id: 'extraLife', name: 'Vidas Extra (+2 Vidas)', cost: 600, desc: 'Comienza con 5 Vidas en lugar de 3.', icon: '❤️' }
+        ];
+
+        let userState = {
+            coins: 0,
+            highScore: 0,
+            upgrades: { shield: false, triple: false, emp: false, doubleCoins: false, extraLife: false }
+        };
+
+        function loadSavedState() {
+            const saved = localStorage.getItem('gatitos_cyber_overdrive_save');
+            if (saved) {
+                try { userState = JSON.parse(saved); } catch (e) {}
+            }
+            updateMenuUI();
+        }
+
+        function saveState() {
+            localStorage.setItem('gatitos_cyber_overdrive_save', JSON.stringify(userState));
+            updateMenuUI();
+        }
+
+        function updateMenuUI() {
+            document.getElementById('menuCoins').innerText = userState.coins;
+            document.getElementById('shopCoins').innerText = userState.coins;
+            document.getElementById('menuHighScore').innerText = userState.highScore;
+            renderShop();
+        }
+
+        function renderShop() {
+            const list = document.getElementById('shopList');
+            list.innerHTML = '';
+            shopCatalog.forEach(item => {
+                const bought = userState.upgrades[item.id];
+                const div = document.createElement('div');
+                div.className = `p-3.5 rounded-xl border flex justify-between items-center bg-gray-950 ${bought ? 'border-green-500/50' : 'border-gray-800'}`;
+                div.innerHTML = `
+                    <div class="flex items-center gap-3">
+                        <span class="text-3xl">${item.icon}</span>
+                        <div class="text-left">
+                            <div class="font-orbitron font-bold text-sm ${bought ? 'text-green-400' : 'text-white'}">${item.name}</div>
+                            <div class="text-xs text-gray-400">${item.desc}</div>
+                        </div>
+                    </div>
+                    <div>
+                        ${bought 
+                            ? `<span class="text-xs font-orbitron text-green-400 font-bold bg-green-950/80 px-3 py-1.5 rounded-lg border border-green-500/40">COMPRADO</span>` 
+                            : `<button onclick="buyUpgrade('${item.id}')" class="neon-btn-gold py-1.5 px-4 rounded-lg font-orbitron font-bold text-xs text-yellow-300">
+                                🪙 ${item.cost}
+                               </button>`
+                        }
+                    </div>
+                `;
+                list.appendChild(div);
+            });
+        }
+
+        window.buyUpgrade = function(id) {
+            const item = shopCatalog.find(i => i.id === id);
+            if (!item) return;
+            if (userState.coins >= item.cost && !userState.upgrades[id]) {
+                sound.init();
+                sound.playBuy();
+                userState.coins -= item.cost;
+                userState.upgrades[id] = true;
+                saveState();
+            }
+        };
+
+        // --- CORE GAME ENGINE & STATE ---
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        let width, height;
+        let isPlaying = false;
+        let gameMode = 'SOLO'; // 'SOLO', 'LOCAL', 'ONLINE_HOST', 'ONLINE_CLIENT'
+        let level = 1;
+
+        let p1, p2;
+        let bullets = [];
+        let enemies = [];
+        let particles = [];
+        let stars = [];
+
+        // Estado Global de Teclas
+        const keyState = {};
+
+        window.addEventListener('keydown', (e) => {
+            keyState[e.code] = true;
+            if (["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.code)) {
+                e.preventDefault();
+            }
+        });
+
+        window.addEventListener('keyup', (e) => {
+            keyState[e.code] = false;
+        });
+
+        function resizeCanvas() {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+            initStars();
+        }
+        window.addEventListener('resize', resizeCanvas);
+
+        function initStars() {
+            stars = [];
+            const count = Math.floor((width * height) / 2800);
+            for (let i = 0; i < count; i++) {
+                stars.push({
+                    x: Math.random() * width,
+                    y: Math.random() * height,
+                    size: Math.random() * 2 + 0.5,
+                    speed: Math.random() * 2 + 0.6,
+                    color: Math.random() > 0.5 ? '#00f3ff' : '#ff0080'
+                });
+            }
+        }
+
+        // CLASE PLAYER SHIP
+        class PlayerShip {
+            constructor(id, x, sprite, color) {
+                this.id = id;
+                this.width = 54;
+                this.height = 54;
+                this.x = x;
+                this.y = height - 120;
+                this.speed = 8;
+                this.sprite = sprite;
+                this.color = color;
+                this.score = 0;
+                this.lives = userState.upgrades.extraLife ? 5 : 3;
+                this.alive = true;
+
+                this.shield = userState.upgrades.shield;
+                this.tripleShot = userState.upgrades.triple;
+                this.lastShotTime = 0;
+            }
+
+            draw() {
+                if (!this.alive) return;
+                ctx.save();
+                ctx.translate(this.x, this.y);
+
+                // Propulsor Neón
+                ctx.fillStyle = this.color;
+                ctx.shadowColor = this.color;
+                ctx.shadowBlur = 12;
+                ctx.beginPath();
+                ctx.moveTo(-10, this.height / 2);
+                ctx.lineTo(10, this.height / 2);
+                ctx.lineTo(0, this.height / 2 + Math.random() * 16 + 8);
+                ctx.fill();
+
+                // Halo Resplandeciente
+                ctx.strokeStyle = this.color;
+                ctx.lineWidth = 3;
+                ctx.shadowColor = this.color;
+                ctx.shadowBlur = 15;
+                ctx.beginPath();
+                ctx.arc(0, 0, this.width / 2 + 3, 0, Math.PI * 2);
+                ctx.stroke();
+
+                // Avatar
+                ctx.drawImage(this.sprite, -this.width / 2, -this.height / 2, this.width, this.height);
+
+                if (this.shield) {
+                    ctx.strokeStyle = '#00ffff';
+                    ctx.lineWidth = 4;
+                    ctx.shadowColor = '#00ffff';
+                    ctx.shadowBlur = 20;
+                    ctx.beginPath();
+                    ctx.arc(0, 0, this.width / 2 + 12, 0, Math.PI * 2);
+                    ctx.stroke();
+                }
+
+                ctx.restore();
+            }
+
+            update() {
+                if (!this.alive) return;
+
+                // Controles del Jugador 1
+                if (this.id === 1) {
+                    if (keyState['ArrowLeft'] || keyState['KeyA'] || keyState['P1_LEFT']) this.x = Math.max(this.width / 2, this.x - this.speed);
+                    if (keyState['ArrowRight'] || keyState['KeyD'] || keyState['P1_RIGHT']) this.x = Math.min(width - this.width / 2, this.x + this.speed);
+                    if (keyState['ArrowUp'] || keyState['KeyW'] || keyState['P1_UP']) this.y = Math.max(this.height / 2, this.y - this.speed);
+                    if (keyState['ArrowDown'] || keyState['KeyS'] || keyState['P1_DOWN']) this.y = Math.min(height - this.height / 2, this.y + this.speed);
+
+                    if (keyState['Space'] || keyState['KeyZ'] || keyState['P1_FIRE']) this.shoot();
+                }
+
+                // Controles del Jugador 2 (Modo Local)
+                if (this.id === 2 && gameMode === 'LOCAL') {
+                    if (keyState['KeyJ'] || keyState['P2_LEFT']) this.x = Math.max(this.width / 2, this.x - this.speed);
+                    if (keyState['KeyL'] || keyState['P2_RIGHT']) this.x = Math.min(width - this.width / 2, this.x + this.speed);
+                    if (keyState['KeyI'] || keyState['P2_UP']) this.y = Math.max(this.height / 2, this.y - this.speed);
+                    if (keyState['KeyK'] || keyState['P2_DOWN']) this.y = Math.min(height - this.height / 2, this.y + this.speed);
+
+                    if (keyState['KeyM'] || keyState['Enter'] || keyState['P2_FIRE']) this.shoot();
+                }
+
+                // Controles del Jugador 2 (Modo Online Client)
+                if (this.id === 2 && gameMode === 'ONLINE_CLIENT') {
+                    if (keyState['ArrowLeft'] || keyState['KeyA'] || keyState['P1_LEFT']) this.x = Math.max(this.width / 2, this.x - this.speed);
+                    if (keyState['ArrowRight'] || keyState['KeyD'] || keyState['P1_RIGHT']) this.x = Math.min(width - this.width / 2, this.x + this.speed);
+                    if (keyState['ArrowUp'] || keyState['KeyW'] || keyState['P1_UP']) this.y = Math.max(this.height / 2, this.y - this.speed);
+                    if (keyState['ArrowDown'] || keyState['KeyS'] || keyState['P1_DOWN']) this.y = Math.min(height - this.height / 2, this.y + this.speed);
+
+                    if (keyState['Space'] || keyState['KeyZ'] || keyState['P1_FIRE']) this.shoot();
+                }
+            }
+
+            shoot() {
+                const now = Date.now();
+                if (now - this.lastShotTime >= 120) {
+                    this.lastShotTime = now;
+                    sound.playShoot();
+
+                    if (this.tripleShot) {
+                        bullets.push(new Bullet(this.x, this.y - 20, 0, -15, this.color, this.id));
+                        bullets.push(new Bullet(this.x - 12, this.y - 15, -3, -14, this.color, this.id));
+                        bullets.push(new Bullet(this.x + 12, this.y - 15, 3, -14, this.color, this.id));
+                    } else {
+                        bullets.push(new Bullet(this.x, this.y - 20, 0, -15, this.color, this.id));
+                    }
+                }
+            }
+        }
+
+        class Bullet {
+            constructor(x, y, vx, vy, color, playerId) {
+                this.x = x; this.y = y; this.vx = vx; this.vy = vy;
+                this.color = color; this.playerId = playerId;
+                this.radius = 4;
+            }
+
+            draw() {
+                ctx.save();
+                ctx.fillStyle = this.color;
+                ctx.shadowColor = this.color;
+                ctx.shadowBlur = 10;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
+
+            update() {
+                this.x += this.vx;
+                this.y += this.vy;
+            }
+        }
+
+        class Enemy {
+            constructor() {
+                this.radius = Math.random() * 6 + 22;
+                this.x = Math.random() * (width - this.radius * 2) + this.radius;
+                this.y = -this.radius;
+                this.speed = Math.random() * 2 + 1.2 + (level * 0.35);
+                this.color = '#ff0055';
+            }
+
+            draw() {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                ctx.strokeStyle = this.color;
+                ctx.lineWidth = 3;
+                ctx.shadowColor = this.color;
+                ctx.shadowBlur = 12;
+                ctx.beginPath();
+                ctx.arc(0, 0, this.radius + 2, 0, Math.PI * 2);
+                ctx.stroke();
+
+                ctx.drawImage(sprites.enemy, -this.radius, -this.radius, this.radius * 2, this.radius * 2);
+                ctx.restore();
+            }
+
+            update() {
+                this.y += this.speed;
+            }
+        }
+
+        class Particle {
+            constructor(x, y, color) {
+                this.x = x; this.y = y; this.color = color;
+                this.vx = (Math.random() - 0.5) * 8;
+                this.vy = (Math.random() - 0.5) * 8;
+                this.alpha = 1;
+                this.decay = Math.random() * 0.03 + 0.02;
+                this.radius = Math.random() * 3 + 1;
+            }
+
+            draw() {
+                ctx.save();
+                ctx.globalAlpha = this.alpha;
+                ctx.fillStyle = this.color;
+                ctx.shadowColor = this.color;
+                ctx.shadowBlur = 6;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
+
+            update() {
+                this.x += this.vx; this.y += this.vy;
+                this.alpha -= this.decay;
+            }
+        }
+
+        function createExplosion(x, y, color, count = 18) {
+            for (let i = 0; i < count; i++) {
+                particles.push(new Particle(x, y, color));
+            }
+        }
+
+        // CONTROLES TÁCTILES BINDINGS DUALES
+        function bindTouchBtn(btnId, stateKey) {
+            const btn = document.getElementById(btnId);
+            if (!btn) return;
+            btn.addEventListener('touchstart', (e) => { e.preventDefault(); keyState[stateKey] = true; });
+            btn.addEventListener('touchend', (e) => { e.preventDefault(); keyState[stateKey] = false; });
+            btn.addEventListener('mousedown', (e) => { e.preventDefault(); keyState[stateKey] = true; });
+            btn.addEventListener('mouseup', (e) => { e.preventDefault(); keyState[stateKey] = false; });
+        }
+
+        // P1 Touch Buttons
+        bindTouchBtn('btnUpP1', 'P1_UP');
+        bindTouchBtn('btnDownP1', 'P1_DOWN');
+        bindTouchBtn('btnLeftP1', 'P1_LEFT');
+        bindTouchBtn('btnRightP1', 'P1_RIGHT');
+        bindTouchBtn('btnFireP1', 'P1_FIRE');
+
+        // P2 Touch Buttons
+        bindTouchBtn('btnUpP2', 'P2_UP');
+        bindTouchBtn('btnDownP2', 'P2_DOWN');
+        bindTouchBtn('btnLeftP2', 'P2_LEFT');
+        bindTouchBtn('btnRightP2', 'P2_RIGHT');
+        bindTouchBtn('btnFireP2', 'P2_FIRE');
+
+        // SISTEMA DE ARRASTRE TÁCTIL DIRECTO (TOUCH SLIDE)
+        canvas.addEventListener('touchmove', (e) => {
+            if (!isPlaying) return;
+            e.preventDefault();
+
+            for (let i = 0; i < e.touches.length; i++) {
+                const touch = e.touches[i];
+                const tx = touch.clientX;
+                const ty = touch.clientY;
+
+                if (gameMode === 'LOCAL' && p2) {
+                    // Si el toque está en la mitad izquierda -> P1, en la mitad derecha -> P2
+                    if (tx < width / 2 && p1 && p1.alive) {
+                        p1.x = Math.max(p1.width / 2, Math.min(width - p1.width / 2, tx));
+                        p1.y = Math.max(p1.height / 2, Math.min(height - p1.height / 2, ty));
+                        p1.shoot();
+                    } else if (tx >= width / 2 && p2 && p2.alive) {
+                        p2.x = Math.max(p2.width / 2, Math.min(width - p2.width / 2, tx));
+                        p2.y = Math.max(p2.height / 2, Math.min(height - p2.height / 2, ty));
+                        p2.shoot();
+                    }
+                } else if (gameMode === 'ONLINE_CLIENT' && p2 && p2.alive) {
+                    p2.x = Math.max(p2.width / 2, Math.min(width - p2.width / 2, tx));
+                    p2.y = Math.max(p2.height / 2, Math.min(height - p2.height / 2, ty));
+                    p2.shoot();
+                } else if (p1 && p1.alive) {
+                    p1.x = Math.max(p1.width / 2, Math.min(width - p1.width / 2, tx));
+                    p1.y = Math.max(p1.height / 2, Math.min(height - p1.height / 2, ty));
+                    p1.shoot();
+                }
+            }
+        }, { passive: false });
+
+        // MULTIJUGADOR ONLINE (PEERJS WEBRTC SETUP)
+        let peer = null;
+        let peerConn = null;
+
+        function initOnlineHost() {
+            const roomCode = 'CAT' + Math.floor(100 + Math.random() * 900);
+            document.getElementById('myRoomCode').innerText = roomCode;
+            document.getElementById('hostCodeBox').classList.remove('hidden');
+
+            peer = new Peer(roomCode);
+
+            peer.on('open', (id) => {
+                document.getElementById('hostStatus').innerText = "Esperando a que P2 ingrese el código...";
+            });
+
+            peer.on('connection', (conn) => {
+                peerConn = conn;
+                setupPeerEvents();
+                document.getElementById('hostStatus').innerText = "¡Jugador 2 conectado! Iniciando...";
+                setTimeout(() => startGame('ONLINE_HOST', roomCode), 800);
+            });
+
+            peer.on('error', (err) => {
+                document.getElementById('hostStatus').innerText = "Error: " + err.type;
+            });
+        }
+
+        function joinOnlineRoom(code) {
+            if (!code) return;
+            document.getElementById('clientStatus').innerText = "Conectando a la sala...";
+            peer = new Peer();
+
+            peer.on('open', () => {
+                peerConn = peer.connect(code);
+                setupPeerEvents();
+            });
+
+            peer.on('error', (err) => {
+                document.getElementById('clientStatus').innerText = "No se encontró la sala.";
+            });
+        }
+
+        function setupPeerEvents() {
+            peerConn.on('open', () => {
+                if (gameMode !== 'ONLINE_HOST') {
+                    document.getElementById('clientStatus').innerText = "¡Conectado! Iniciando partida...";
+                    setTimeout(() => startGame('ONLINE_CLIENT', peerConn.peer), 800);
+                }
+            });
+
+            peerConn.on('data', (data) => {
+                if (gameMode === 'ONLINE_HOST') {
+                    if (data.type === 'P2_POS' && p2) {
+                        p2.x = data.x;
+                        p2.y = data.y;
+                        if (data.shooting) p2.shoot();
+                    }
+                } else if (gameMode === 'ONLINE_CLIENT') {
+                    if (data.type === 'SYNC_GAME') {
+                        level = data.level;
+                        if (p1) { p1.x = data.p1.x; p1.y = data.p1.y; p1.score = data.p1.score; p1.lives = data.p1.lives; p1.alive = data.p1.alive; }
+                        if (p2) { p2.score = data.p2.score; p2.lives = data.p2.lives; p2.alive = data.p2.alive; }
+
+                        enemies = data.enemies.map(e => {
+                            const en = new Enemy();
+                            en.x = e.x; en.y = e.y; en.radius = e.radius;
+                            return en;
+                        });
+
+                        bullets = data.bullets.map(b => new Bullet(b.x, b.y, b.vx, b.vy, b.color, b.playerId));
+                        updateHUD();
+                    }
+                }
+            });
+        }
+
+        function sendOnlineSync() {
+            if (!peerConn || !peerConn.open) return;
+
+            if (gameMode === 'ONLINE_HOST') {
+                peerConn.send({
+                    type: 'SYNC_GAME',
+                    level: level,
+                    p1: { x: p1.x, y: p1.y, score: p1.score, lives: p1.lives, alive: p1.alive },
+                    p2: { x: p2 ? p2.x : 0, y: p2 ? p2.y : 0, score: p2 ? p2.score : 0, lives: p2 ? p2.lives : 0, alive: p2 ? p2.alive : false },
+                    enemies: enemies.map(e => ({ x: e.x, y: e.y, radius: e.radius })),
+                    bullets: bullets.map(b => ({ x: b.x, y: b.y, vx: b.vx, vy: b.vy, color: b.color, playerId: b.playerId }))
+                });
+            } else if (gameMode === 'ONLINE_CLIENT' && p2) {
+                peerConn.send({
+                    type: 'P2_POS',
+                    x: p2.x,
+                    y: p2.y,
+                    shooting: keyState['Space'] || keyState['KeyZ'] || keyState['P1_FIRE']
+                });
+            }
+        }
+
+        // BUCLE PRINCIPAL DE ACTUALIZACIÓN
+        let enemyTimer = 0;
+
+        function update() {
+            stars.forEach(s => {
+                s.y += s.speed;
+                if (s.y > height) { s.y = 0; s.x = Math.random() * width; }
+            });
+
+            if (!isPlaying) return;
+
+            if (gameMode === 'ONLINE_CLIENT') {
+                if (p2) p2.update();
+            } else {
+                p1.update();
+                if (p2) p2.update();
+            }
+
+            if (gameMode !== 'ONLINE_CLIENT') {
+                enemyTimer++;
+                if (enemyTimer >= Math.max(18, 55 - level * 4)) {
+                    enemies.push(new Enemy());
+                    enemyTimer = 0;
+                }
+
+                bullets.forEach((b, index) => {
+                    b.update();
+                    if (b.y < -10 || b.x < -10 || b.x > width + 10) bullets.splice(index, 1);
+                });
+
+                enemies.forEach((enemy, eIndex) => {
+                    enemy.update();
+
+                    const checkCollision = (p) => {
+                        if (!p || !p.alive) return;
+                        const dist = Math.hypot(p.x - enemy.x, p.y - enemy.y);
+                        if (dist < p.width / 2 + enemy.radius) {
+                            if (p.shield) {
+                                p.shield = false;
+                                createExplosion(enemy.x, enemy.y, enemy.color);
+                                enemies.splice(eIndex, 1);
+                                sound.playExplosion();
+                            } else {
+                                p.lives--;
+                                createExplosion(p.x, p.y, p.color, 25);
+                                enemies.splice(eIndex, 1);
+                                sound.playExplosion();
+                                if (p.lives <= 0) p.alive = false;
+                                updateHUD();
+                            }
+                        }
+                    };
+
+                    checkCollision(p1);
+                    if (p2) checkCollision(p2);
+
+                    bullets.forEach((bullet, bIndex) => {
+                        const dist = Math.hypot(bullet.x - enemy.x, bullet.y - enemy.y);
+                        if (dist < enemy.radius + bullet.radius) {
+                            createExplosion(enemy.x, enemy.y, enemy.color, 20);
+                            sound.playExplosion();
+
+                            if (bullet.playerId === 1) p1.score += 100 * level;
+                            else if (p2) p2.score += 100 * level;
+
+                            enemies.splice(eIndex, 1);
+                            bullets.splice(bIndex, 1);
+
+                            const totalScore = p1.score + (p2 ? p2.score : 0);
+                            if (totalScore >= level * 1500) level++;
+                            updateHUD();
+                        }
+                    });
+
+                    if (enemy.y > height + enemy.radius) enemies.splice(eIndex, 1);
+                });
+
+                const allDead = p2 ? (!p1.alive && !p2.alive) : !p1.alive;
+                if (allDead) triggerGameOver();
+            }
+
+            particles.forEach((p, index) => {
+                p.update();
+                if (p.alpha <= 0) particles.splice(index, 1);
+            });
+
+            if (gameMode.startsWith('ONLINE')) {
+                sendOnlineSync();
+            }
+        }
+
+        function render() {
+            ctx.clearRect(0, 0, width, height);
+
+            stars.forEach(s => {
+                ctx.fillStyle = s.color;
+                ctx.fillRect(s.x, s.y, s.size, s.size);
+            });
+
+            if (isPlaying) {
+                p1.draw();
+                if (p2) p2.draw();
+                bullets.forEach(b => b.draw());
+                enemies.forEach(e => e.draw());
+            }
+
+            particles.forEach(p => p.draw());
+        }
+
+        function gameLoop() {
+            update();
+            render();
+            requestAnimationFrame(gameLoop);
+        }
+
+        function updateHUD() {
+            document.getElementById('hudP1Score').innerText = `${p1.score} PTS`;
+            document.getElementById('hudP1Lives').innerText = '❤️'.repeat(Math.max(0, p1.lives)) + ' Vidas';
+
+            // REGLA CAMBIADA: 5,000 PUNTOS = 500 MONEDAS (0.1 monedas por punto)
+            const totalScore = p1.score + (p2 ? p2.score : 0);
+            const baseCoins = Math.floor(totalScore * 0.1);
+            const multiplier = userState.upgrades.doubleCoins ? 2 : 1;
+            const coinsEarned = baseCoins * multiplier;
+
+            document.getElementById('hudCoinsEarned').innerText = `🪙 +${coinsEarned} Monedas`;
+            document.getElementById('hudLevel').innerText = `Nivel ${level}`;
+
+            if (p2) {
+                document.getElementById('hudP2Score').innerText = `${p2.score} PTS`;
+                document.getElementById('hudP2Lives').innerText = '❤️'.repeat(Math.max(0, p2.lives)) + ' Vidas';
+            }
+        }
+
+        function startGame(mode, roomCode = "SOLO") {
+            sound.init();
+            isPlaying = true;
+            gameMode = mode;
+            level = 1;
+            bullets = []; enemies = []; particles = [];
+
+            const isMulti = gameMode !== 'SOLO';
+
+            p1 = new PlayerShip(1, isMulti ? width * 0.35 : width / 2, sprites.p1, '#00f3ff');
+
+            if (isMulti) {
+                p2 = new PlayerShip(2, width * 0.65, sprites.p2, '#ff0080');
+                document.getElementById('hudP2Container').classList.remove('hidden');
+            } else {
+                p2 = null;
+                document.getElementById('hudP2Container').classList.add('hidden');
+            }
+
+            if (userState.upgrades.emp) {
+                setTimeout(() => {
+                    enemies.forEach(e => createExplosion(e.x, e.y, '#ff00ff', 15));
+                    enemies = [];
+                    sound.playExplosion();
+                }, 400);
+            }
+
+            document.getElementById('hudModeBadge').innerText = roomCode;
+            document.getElementById('mainMenu').classList.add('hidden');
+            document.getElementById('onlineModal').classList.add('hidden');
+            document.getElementById('gameOverScreen').classList.add('hidden');
+            document.getElementById('hud').classList.remove('hidden');
+
+            // MOSTRAR CONTROLES TÁCTILES SEGÚN MODO
+            const isTouch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+            if (isTouch) {
+                document.getElementById('touchControlsP1').classList.remove('hidden');
+                if (gameMode === 'LOCAL') {
+                    document.getElementById('touchControlsP2').classList.remove('hidden');
+                } else {
+                    document.getElementById('touchControlsP2').classList.add('hidden');
+                }
+            }
+
+            updateHUD();
+        }
+
+        function triggerGameOver() {
+            isPlaying = false;
+            document.getElementById('hud').classList.add('hidden');
+            document.getElementById('touchControlsP1').classList.add('hidden');
+            document.getElementById('touchControlsP2').classList.add('hidden');
+            document.getElementById('gameOverScreen').classList.remove('hidden');
+
+            const totalScore = p1.score + (p2 ? p2.score : 0);
+            const baseCoins = Math.floor(totalScore * 0.1); // 5000 pts = 500 coins
+            const multiplier = userState.upgrades.doubleCoins ? 2 : 1;
+            const coinsEarned = baseCoins * multiplier;
+
+            userState.coins += coinsEarned;
+            if (totalScore > userState.highScore) {
+                userState.highScore = totalScore;
+            }
+            saveState();
+
+            document.getElementById('finalScore').innerText = `${totalScore} PTS`;
+            document.getElementById('finalCoinsEarned').innerText = `+${coinsEarned} 🪙`;
+            document.getElementById('finalLevel').innerText = `Nivel ${level}`;
+        }
+
+        // BINDINGS MENÚ
+        document.getElementById('startSoloBtn').addEventListener('click', () => startGame('SOLO', 'SOLO'));
+        document.getElementById('startLocalBtn').addEventListener('click', () => startGame('LOCAL', 'LOCAL 2P'));
+
+        document.getElementById('openOnlineBtn').addEventListener('click', () => {
+            document.getElementById('onlineModal').classList.remove('hidden');
+        });
+        document.getElementById('closeOnlineBtn').addEventListener('click', () => {
+            document.getElementById('onlineModal').classList.add('hidden');
+        });
+
+        document.getElementById('hostCreateBtn').addEventListener('click', () => {
+            initOnlineHost();
+        });
+
+        document.getElementById('joinRoomBtn').addEventListener('click', () => {
+            const code = document.getElementById('joinCodeInput').value.trim().toUpperCase();
+            if (code) joinOnlineRoom(code);
+        });
+
+        document.getElementById('openShopBtn').addEventListener('click', () => {
+            document.getElementById('shopModal').classList.remove('hidden');
+        });
+        document.getElementById('closeShopBtn').addEventListener('click', () => {
+            document.getElementById('shopModal').classList.add('hidden');
+        });
+
+        document.getElementById('restartBtn').addEventListener('click', () => startGame(gameMode, 'REMATCH'));
+        document.getElementById('returnMenuBtn').addEventListener('click', () => {
+            document.getElementById('gameOverScreen').classList.add('hidden');
+            document.getElementById('mainMenu').classList.remove('hidden');
+            updateMenuUI();
+        });
+
+        // Inicialización
+        resizeCanvas();
+        loadSavedState();
+        gameLoop();
+    </script>
+</body>
+</html>
